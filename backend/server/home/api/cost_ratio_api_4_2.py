@@ -240,483 +240,487 @@ def cost_ratio_api():
 		else:
 			print("繼續")
 
-			# 爲了防止漏掉進貨的時候沒有進貨編的數據(没有进货编'零开销'的也带) --> 計4編 防止重複數據
-			# purchase --> 进货
-			purchase = pd.merge(supplier_to_ware_room12, purchase_code, how='left', on=['Y編', '歸零日期', '數量', '計4編'],
-								left_index=False, right_index=False,
-								sort=True).sort_values(by='歸零日期', ascending=False)
+		# 爲了防止漏掉進貨的時候沒有進貨編的數據(没有进货编'零开销'的也带) --> 計4編 防止重複數據
+		# purchase --> 进货
+		purchase = pd.merge(supplier_to_ware_room12, purchase_code, how='left', on=['Y編', '歸零日期', '數量', '計4編'],
+							left_index=False, right_index=False,
+							sort=True).sort_values(by='歸零日期', ascending=False)
 
-			purchase['類編2_x'] = purchase['類編2_x'].fillna(purchase['類編2_y'])
-			purchase = purchase.drop(columns=['類編2_y', '進貨編_x'])
-			purchase = purchase.rename(columns={'類編2_x': '類編2', 'Y編': 'id', '進貨編_y': '進貨編'})
+		purchase['類編2_x'] = purchase['類編2_x'].fillna(purchase['類編2_y'])
+		purchase = purchase.drop(columns=['類編2_y', '進貨編_x'])
+		purchase = purchase.rename(columns={'類編2_x': '類編2', 'Y編': 'id', '進貨編_y': '進貨編'})
 
-			# 删除数量（-）的笔数 --> 无效数据 退回去的商品没有开销还会占笔数
-			purchase = purchase.drop(purchase[(purchase['數量'] <= 0)].index)
+		# 删除数量（-）的笔数 --> 无效数据 退回去的商品没有开销还会占笔数
+		purchase = purchase.drop(purchase[(purchase['數量'] <= 0)].index)
 
-			# qty api
-			o_ku_jin_api = requests.get("http://192.168.1.85/mongodb_data_api/api/v1/data/o_ku_jin/qty")
-			o_ku_jin = pd.DataFrame(json.loads(o_ku_jin_api.json())).round(2)
+		# qty api
+		o_ku_jin_api = requests.get("http://192.168.1.85/mongodb_data_api/api/v1/data/o_ku_jin/qty")
+		o_ku_jin = pd.DataFrame(json.loads(o_ku_jin_api.json())).round(2)
 
-			# 庫存
-			in_stock = pd.merge(o_ku_jin, cate_ware_room12, how='left', left_on=['jia_fang'], right_on=['id'],
-								left_index=False, right_index=False, sort=True).dropna(subset=['id']
-								).groupby("product_id").agg({'product_qty': 'sum'}).reset_index().rename(
-								columns={'product_id': 'id', 'product_qty': 'stock'})
+		# 庫存
+		in_stock = pd.merge(o_ku_jin, cate_ware_room12, how='left', left_on=['jia_fang'], right_on=['id'],
+							left_index=False, right_index=False, sort=True).dropna(subset=['id']
+							).groupby("product_id").agg({'product_qty': 'sum'}).reset_index().rename(
+							columns={'product_id': 'id', 'product_qty': 'stock'})
 
-			# Join --> purchase & in_stock
-			purchase_in_stock = pd.merge(purchase, in_stock, how='outer', on='id', left_index=False, right_index=False,
-										 sort=True).sort_values(by='歸零日期', ascending=False)
+		# Join --> purchase & in_stock
+		purchase_in_stock = pd.merge(purchase, in_stock, how='outer', on='id', left_index=False, right_index=False,
+									 sort=True).sort_values(by='歸零日期', ascending=False)
 
-			tz = pytz.timezone('Asia/Yangon')  # 缅甸时间 TimeZone
-			d = datetime.datetime.now(tz=tz).strftime('%Y-%m-%d')
-			dt = d + " 13:30:00"
-			print(d)
-			print(dt)
+		tz = pytz.timezone('Asia/Yangon')  # 缅甸时间 TimeZone
+		d = datetime.datetime.now(tz=tz).strftime('%Y-%m-%d')
+		dt = d + " 13:30:00"
+		print(d)
+		print(dt)
 
-			# # 排除當天和當天13：30前的數據
-			# purchase_in_stock = purchase_in_stock.drop(purchase_in_stock[(purchase_in_stock['歸零日期'] >= d)&
-			#                 (purchase_in_stock['歸零日期'] < dt)].index)
+		# # 排除當天和當天13：30前的數據
+		# purchase_in_stock = purchase_in_stock.drop(purchase_in_stock[(purchase_in_stock['歸零日期'] >= d)&
+		#                 (purchase_in_stock['歸零日期'] < dt)].index)
 
-			# 排除重複數據
-			purchase_in_stock = purchase_in_stock.drop_duplicates()
+		# 排除重複數據
+		purchase_in_stock = purchase_in_stock.drop_duplicates()
 
-			# 這一條可刪除 待定
-			purchase_in_stock['數量'] = purchase_in_stock['數量'].fillna(0)
+		# 這一條可刪除 待定
+		purchase_in_stock['數量'] = purchase_in_stock['數量'].fillna(0)
 
-			# 計算成本
-			cost = purchase_code.groupby("進貨編").agg({'s開銷': 'sum', 's貨款': 'sum'}).reset_index()
-			cost['cost_ratio'] = cost['s開銷'] / cost['s貨款']
-			cost = cost.drop(columns=['s開銷', 's貨款'])
+		# 計算成本
+		cost = purchase_code.groupby("進貨編").agg({'s開銷': 'sum', 's貨款': 'sum'}).reset_index()
+		cost['cost_ratio'] = cost['s開銷'] / cost['s貨款']
+		cost = cost.drop(columns=['s開銷', 's貨款'])
 
-			purchase_in_stock_cost = pd.merge(purchase_in_stock, cost, how='left', on='進貨編', left_index=False,
-											  right_index=False, sort=True).sort_values(by='歸零日期', ascending=False)
+		purchase_in_stock_cost = pd.merge(purchase_in_stock, cost, how='left', on='進貨編', left_index=False,
+										  right_index=False, sort=True).sort_values(by='歸零日期', ascending=False)
 
-			# cost_ratio = NaN 代表沒有开销 --> 替換成 0
-			purchase_in_stock_cost['cost_ratio'] = purchase_in_stock_cost['cost_ratio'].fillna(0)
+		# cost_ratio = NaN 代表沒有开销 --> 替換成 0
+		purchase_in_stock_cost['cost_ratio'] = purchase_in_stock_cost['cost_ratio'].fillna(0)
 
-			# cost_ratio = inf 代表数据无效 --> 替換成 NaN --> 刪除
-			purchase_in_stock_cost = purchase_in_stock_cost.replace([np.inf, -np.inf], np.nan).dropna(axis=0, subset=[
-				'cost_ratio'])
+		# cost_ratio = inf 代表数据无效 --> 替換成 NaN --> 刪除
+		purchase_in_stock_cost = purchase_in_stock_cost.replace([np.inf, -np.inf], np.nan).dropna(axis=0, subset=[
+			'cost_ratio'])
 
-			purchase_in_stock_cost = purchase_in_stock_cost[['進貨編', '日期', '歸零日期', '類編1', '類編2', '甲方', '乙方',
-															 'id', '數量', '進價', '售價', '計4編', 's開銷', 's貨款',
-															 '備忘錄m', '商品分類', 'stock', 'cost_ratio']]
+		purchase_in_stock_cost = purchase_in_stock_cost[['進貨編', '日期', '歸零日期', '類編1', '類編2', '甲方', '乙方',
+														 'id', '數量', '進價', '售價', '計4編', 's開銷', 's貨款',
+														 '備忘錄m', '商品分類', 'stock', 'cost_ratio']]
 
-			tz = pytz.timezone('Asia/Yangon')  # 缅甸时间 TimeZone
-			d = datetime.datetime.now(tz=tz).strftime('%Y-%m-%d')
-			print(d)
+		tz = pytz.timezone('Asia/Yangon')  # 缅甸时间 TimeZone
+		d = datetime.datetime.now(tz=tz).strftime('%Y-%m-%d')
+		print(d)
 
-			one_product = purchase_in_stock_cost[purchase_in_stock_cost['商品分類'].notnull()]
-			one_product = one_product.loc[(one_product.商品分類 != 341)]  # 排除是雜貨的車
+		one_product = purchase_in_stock_cost[purchase_in_stock_cost['商品分類'].notnull()]
+		one_product = one_product.loc[(one_product.商品分類 != 341)]  # 排除是雜貨的車
 
-			# 查詢只有一個商品的進貨編
-			for one_product_idx, data in one_product.iterrows():
+		# 查詢只有一個商品的進貨編
+		for one_product_idx, data in one_product.iterrows():
 
-				df = one_product.loc[(one_product['進貨編'] == data[0])].sort_values(by="歸零日期",ascending=False)
-				id_count = len(df.groupby("id"))
+			df = one_product.loc[(one_product['進貨編'] == data[0])].sort_values(by="歸零日期",ascending=False)
+			id_count = len(df.groupby("id"))
 
-				if one_product_idx in one_product.index and id_count > 1:
-					one_product = one_product.drop(df.index)
+			if one_product_idx in one_product.index and id_count > 1:
+				one_product = one_product.drop(df.index)
 
-			one_product = one_product.sort_values(by='進貨編', ascending=False)
+		one_product = one_product.sort_values(by='進貨編', ascending=False)
 
-			# 一張車能裝多少產品表格
-			car_net_qty_tb = pd.read_sql("SELECT id,type_car,net_qty from car_net_qty", con)
-			not_trailer = car_net_qty_tb.loc[car_net_qty_tb.type_car != 438]
+		# 一張車能裝多少產品表格
+		car_net_qty_tb = pd.read_sql("SELECT id,type_car,net_qty from car_net_qty", con)
+		not_trailer = car_net_qty_tb.loc[car_net_qty_tb.type_car != 438]
 
-			cate_one_product = one_product
+		cate_one_product = one_product
+		# 刪除獨立產品的數量不滿車的數據
+		for cate_one_product_idx, cate_one_product_data in cate_one_product.iterrows():
+
+			cate_one_product_id = cate_one_product_data[[7]]
+			cate_one_product_car = cate_one_product_data[[15]]
+
+			if float(cate_one_product_id) in not_trailer[['id']].values:
+				not_trailer_df = not_trailer.loc[(not_trailer.id == float(cate_one_product_id))]
+				type_car_df = not_trailer_df.loc[(not_trailer_df.type_car == float(cate_one_product_car))]
+
+				if type_car_df.index.values.tolist() != [] and cate_one_product_data[8] != float(
+						type_car_df['net_qty']):
+					cate_one_product = cate_one_product.drop(cate_one_product_idx)
+
+		# 一張車僅帶一個產品的成本 --> 獨立產品
+		one_product_per_car = cate_one_product.groupby(["id", "進價"]).agg(
+			{'cost_ratio': 'mean'}).reset_index().round(4)
+
+		# 只單獨拿水泥的id
+		product_info_x = pd.read_sql("SELECT * from product_info ", con)
+		product_category_x = pd.read_sql("SELECT * from product_category ", con)
+
+		# 連起來
+		product_info_y = pd.merge(product_info_x, product_category_x, how='left', left_on='type',
+								  right_on='id').merge(
+			product_category_x, how='left', left_on='c_id', right_on='id', left_index=False, right_index=False,
+			sort=True).drop(
+			columns={'id_y', 'id', 'duty', 'status', 'c_id_y', 'level_x', 'level_y'}).rename(
+			columns={'type': 'c_id1', 'id_x': 'id', 'name_x': 'c_name1', 'c_id_x': 'c_id2', 'name_y': 'c_name2'})
+
+		# 30 --> 水泥的類編
+		cement = product_info_y.loc[product_info_y.c_id2 == 30]
+
+		# 合并水泥和獨立產品，去重，只拿id
+		cement_and_product_per_car = pd.concat(
+			[one_product_per_car[['id']], cement[['id']]]).drop_duplicates().rename(columns={'id': 'both_id'})
+
+		stock_ratio_test = purchase_in_stock_cost.sort_values(by='歸零日期', ascending=False)
+
+		# 刪除多于庫存的進貨筆數
+		for stock_ratio_test_idx, stock_ratio_test_data in stock_ratio_test.iterrows():
+
+			print(stock_ratio_test_idx)
+
+			if stock_ratio_test_idx in stock_ratio_test.index:
+
+				print("index exist")
+
+				# 以id來區分循環數據
+				df = stock_ratio_test.loc[(stock_ratio_test['id'] == stock_ratio_test_data[7])]  # 從0開始數的列位置
+				# 循環到第几次 -->初始為0
+				count = 0
+				# 相加后的采購数量總和 -->初始為0
+				purchase_qty = 0
+
+				for df_idx, df_data in df.iterrows():
+
+					count += 1
+					# 采购数量相加
+					purchase_qty += df_data[8]
+					# 庫存
+					stock = df_data[16]
+
+					# 當循環到的進貨的數量大於庫存，刪除剩餘的數據，推出循環
+					if purchase_qty >= stock:
+						# 要刪除的數量
+						drop_qty = len(df) - count
+						index_drop_qty = df.tail(drop_qty).index
+						# 刪除
+						stock_ratio_test = stock_ratio_test.drop(index=index_drop_qty, axis=1)
+
+						# 退出循環
+						break
+
+		stock_ratio_test = stock_ratio_test.rename(columns={'進貨編': '進貨編_2'})
+
+		# 先把獨立產品和水泥排在前面，再去排剩下的產品
+		sort_purchase_in_stock_cost = pd.merge(purchase_in_stock_cost, cement_and_product_per_car, how='left',
+											   left_on='id', right_on='both_id', left_index=False,
+											   right_index=False, sort=True).sort_values(by='both_id',
+																						 ascending=True)
+
+		# 簡短數據-->
+		stock_ratio = pd.merge(sort_purchase_in_stock_cost,
+							stock_ratio_test[['進貨編_2', '歸零日期', 'id', '數量', '進價', '計4編', 's貨款']],
+							how='left', left_on=['進貨編', '歸零日期', 'id', '數量', '計4編'], right_on=['進貨編_2',
+							'歸零日期', 'id', '數量', '計4編'], left_index=False, right_index=False, sort=True).drop(
+							columns={'進價_y', 's貨款_y'}).rename(columns={'進價_x': '進價', 's貨款_x': 's貨款'})
+
+		# 刪除進貨編不在stock_ratio df裏的
+		for stock_ratio_idx, stock_ratio_data in stock_ratio.iterrows():
+			# 進貨編 = NaN 的話無效
+			df = stock_ratio.loc[(stock_ratio['進貨編'] == stock_ratio_data[0])]
+			if stock_ratio_data[0] not in df[['進貨編_2']].values:
+				stock_ratio = stock_ratio.drop(df.index)
+
+		stock_ratio = stock_ratio.sort_values(by='both_id', ascending=True)
+
+		# 先計算獨立產品和水泥的開銷，再把剩餘的開銷以金額為准分給其他產品
+		count = 0
+		for stock_ratio_idx, stock_ratio_data in stock_ratio.iterrows():
+			count += 1
+			print(count)
+			stock_ratio_進貨編 = stock_ratio_data[0]
+			stock_ratio_cost = stock_ratio_data[17]
+			stock_ratio_id = stock_ratio_data[7]
+			purchase_price = stock_ratio_data[9]
+			stock_ratio_car = stock_ratio_data[15]
+
+			df = stock_ratio.loc[(stock_ratio['進貨編'] == stock_ratio_進貨編)]  #
+			id_count = len(df.groupby("id"))
+
 			# 刪除獨立產品的數量不滿車的數據
-			for cate_one_product_idx, cate_one_product_data in cate_one_product.iterrows():
+			if id_count == 1 and stock_ratio_cost != 0 and stock_ratio_id in car_net_qty_tb[['id']].values:
+				car_net_qty_df = car_net_qty_tb.loc[(car_net_qty_tb.id == stock_ratio_id)]
+				type_car_df = car_net_qty_df.loc[(car_net_qty_df.type_car == stock_ratio_car)]
 
-				cate_one_product_id = cate_one_product_data[[7]]
-				cate_one_product_car = cate_one_product_data[[15]]
-
-				if float(cate_one_product_id) in not_trailer[['id']].values:
-					not_trailer_df = not_trailer.loc[(not_trailer.id == float(cate_one_product_id))]
-					type_car_df = not_trailer_df.loc[(not_trailer_df.type_car == float(cate_one_product_car))]
-
-					if type_car_df.index.values.tolist() != [] and cate_one_product_data[8] != float(
-							type_car_df['net_qty']):
-						cate_one_product = cate_one_product.drop(cate_one_product_idx)
-
-			# 一張車僅帶一個產品的成本 --> 獨立產品
-			one_product_per_car = cate_one_product.groupby(["id", "進價"]).agg(
-				{'cost_ratio': 'mean'}).reset_index().round(4)
-
-			# 只單獨拿水泥的id
-			product_info_x = pd.read_sql("SELECT * from product_info ", con)
-			product_category_x = pd.read_sql("SELECT * from product_category ", con)
-
-			# 連起來
-			product_info_y = pd.merge(product_info_x, product_category_x, how='left', left_on='type',
-									  right_on='id').merge(
-				product_category_x, how='left', left_on='c_id', right_on='id', left_index=False, right_index=False,
-				sort=True).drop(
-				columns={'id_y', 'id', 'duty', 'status', 'c_id_y', 'level_x', 'level_y'}).rename(
-				columns={'type': 'c_id1', 'id_x': 'id', 'name_x': 'c_name1', 'c_id_x': 'c_id2', 'name_y': 'c_name2'})
-
-			# 30 --> 水泥的類編
-			cement = product_info_y.loc[product_info_y.c_id2 == 30]
-
-			# 合并水泥和獨立產品，去重，只拿id
-			cement_and_product_per_car = pd.concat(
-				[one_product_per_car[['id']], cement[['id']]]).drop_duplicates().rename(columns={'id': 'both_id'})
-
-			stock_ratio_test = purchase_in_stock_cost.sort_values(by='歸零日期', ascending=False)
-
-			# 刪除多于庫存的進貨筆數
-			for stock_ratio_test_idx, stock_ratio_test_data in stock_ratio_test.iterrows():
-
-				print(stock_ratio_test_idx)
-
-				if stock_ratio_test_idx in stock_ratio_test.index:
-
-					print("index exist")
-
-					# 以id來區分循環數據
-					df = stock_ratio_test.loc[(stock_ratio_test['id'] == stock_ratio_test_data[7])]  # 從0開始數的列位置
-					# 循環到第几次 -->初始為0
-					count = 0
-					# 相加后的采購数量總和 -->初始為0
-					purchase_qty = 0
-
-					for df_idx, df_data in df.iterrows():
-
-						count += 1
-						# 采购数量相加
-						purchase_qty += df_data[8]
-						# 庫存
-						stock = df_data[16]
-
-						# 當循環到的進貨的數量大於庫存，刪除剩餘的數據，推出循環
-						if purchase_qty >= stock:
-							# 要刪除的數量
-							drop_qty = len(df) - count
-							index_drop_qty = df.tail(drop_qty).index
-							# 刪除
-							stock_ratio_test = stock_ratio_test.drop(index=index_drop_qty, axis=1)
-
-							# 退出循環
-							break
-
-			stock_ratio_test = stock_ratio_test.rename(columns={'進貨編': '進貨編_2'})
-
-			# 先把獨立產品和水泥排在前面，再去排剩下的產品
-			sort_purchase_in_stock_cost = pd.merge(purchase_in_stock_cost, cement_and_product_per_car, how='left',
-												   left_on='id', right_on='both_id', left_index=False,
-												   right_index=False, sort=True).sort_values(by='both_id',
-																							 ascending=True)
-
-			# 簡短數據-->
-			stock_ratio = pd.merge(sort_purchase_in_stock_cost,
-								stock_ratio_test[['進貨編_2', '歸零日期', 'id', '數量', '進價', '計4編', 's貨款']],
-								how='left', left_on=['進貨編', '歸零日期', 'id', '數量', '計4編'], right_on=['進貨編_2',
-								'歸零日期', 'id', '數量', '計4編'], left_index=False, right_index=False, sort=True).drop(
-								columns={'進價_y', 's貨款_y'}).rename(columns={'進價_x': '進價', 's貨款_x': 's貨款'})
-
-			# 刪除進貨編不在stock_ratio df裏的
-			for stock_ratio_idx, stock_ratio_data in stock_ratio.iterrows():
-				# 進貨編 = NaN 的話無效
-				df = stock_ratio.loc[(stock_ratio['進貨編'] == stock_ratio_data[0])]
-				if stock_ratio_data[0] not in df[['進貨編_2']].values:
+				if type_car_df.index.values.tolist() != [] and stock_ratio_data[8] != float(type_car_df['net_qty']):
 					stock_ratio = stock_ratio.drop(df.index)
 
-			stock_ratio = stock_ratio.sort_values(by='both_id', ascending=True)
+			# 代表這張車不僅有一個產品 & 不算開銷為0的商品
+			elif id_count > 1 and stock_ratio_cost != 0:
 
-			# 先計算獨立產品和水泥的開銷，再把剩餘的開銷以金額為准分給其他產品
-			count = 0
-			for stock_ratio_idx, stock_ratio_data in stock_ratio.iterrows():
-				count += 1
-				print(count)
-				stock_ratio_進貨編 = stock_ratio_data[0]
-				stock_ratio_cost = stock_ratio_data[17]
-				stock_ratio_id = stock_ratio_data[7]
-				purchase_price = stock_ratio_data[9]
-				stock_ratio_car = stock_ratio_data[15]
+				products_payment_per_car = []
+				products_spending_per_car = []
 
-				df = stock_ratio.loc[(stock_ratio['進貨編'] == stock_ratio_進貨編)]  #
-				id_count = len(df.groupby("id"))
+				cements_spending_not_per_car = []
 
-				# 刪除獨立產品的數量不滿車的數據
-				if id_count == 1 and stock_ratio_cost != 0 and stock_ratio_id in car_net_qty_tb[['id']].values:
-					car_net_qty_df = car_net_qty_tb.loc[(car_net_qty_tb.id == stock_ratio_id)]
-					type_car_df = car_net_qty_df.loc[(car_net_qty_df.type_car == stock_ratio_car)]
+				cements_spending_per_car = []
 
-					if type_car_df.index.values.tolist() != [] and stock_ratio_data[8] != float(type_car_df['net_qty']):
-						stock_ratio = stock_ratio.drop(df.index)
+				cements_index = []
+				cements_id = []
 
-				# 代表這張車不僅有一個產品 & 不算開銷為0的商品
-				elif id_count > 1 and stock_ratio_cost != 0:
+				cements_payment = []
+				cements_spending = []
 
-					products_payment_per_car = []
-					products_spending_per_car = []
+				# 排查一張車-->進貨編
+				for df_idx, df_data in df.iterrows():
+					df_id = df_data[7]
+					#             print(df_id)
 
-					cements_spending_not_per_car = []
-
-					cements_spending_per_car = []
-
-					cements_index = []
-					cements_id = []
-
-					cements_payment = []
-					cements_spending = []
-
-					# 排查一張車-->進貨編
-					for df_idx, df_data in df.iterrows():
-						df_id = df_data[7]
-						#             print(df_id)
-
-						# 除水泥外的獨立商品
-						if df_id in one_product_per_car[['id']].values and df_id not in cement[['id']].values:
-							#                 print("one_product_per_car_not_cement")
-							# 貨款
-							product_payment = df.loc[df_idx, 's貨款']
-							products_payment_per_car.append(product_payment)
+					# 除水泥外的獨立商品
+					if df_id in one_product_per_car[['id']].values and df_id not in cement[['id']].values:
+						#                 print("one_product_per_car_not_cement")
+						# 貨款
+						product_payment = df.loc[df_idx, 's貨款']
+						products_payment_per_car.append(product_payment)
+						# 開銷
+						product_spending = df.loc[df_idx, 's貨款'] * df.loc[df_idx, 'cost_ratio']
+						products_spending_per_car.append(product_spending)
+					# 不是獨立商品的水泥
+					elif df_id not in one_product_per_car[['id']].values and df_id in cement[['id']].values:
+						#                 print("cement_not_per_car")
+						if stock_ratio_idx != df_idx:  # 不能是現在大循環到的id
 							# 開銷
-							product_spending = df.loc[df_idx, 's貨款'] * df.loc[df_idx, 'cost_ratio']
-							products_spending_per_car.append(product_spending)
-						# 不是獨立商品的水泥
-						elif df_id not in one_product_per_car[['id']].values and df_id in cement[['id']].values:
-							#                 print("cement_not_per_car")
-							if stock_ratio_idx != df_idx:  # 不能是現在大循環到的id
-								# 開銷
-								cement_spending_not_per_car = df.loc[df_idx, 's貨款'] * df.loc[df_idx, 'cost_ratio']
-								cements_spending_not_per_car.append(cement_spending_not_per_car)
-						# 獨立水泥
-						elif df_id in one_product_per_car[['id']].values:
-							#                 print("cement_per_car")
-							# 開銷
-							cement_spending = df.loc[df_idx, 's貨款'] * df.loc[df_idx, 'cost_ratio']
-							cements_spending_per_car.append(cement_spending)
+							cement_spending_not_per_car = df.loc[df_idx, 's貨款'] * df.loc[df_idx, 'cost_ratio']
+							cements_spending_not_per_car.append(cement_spending_not_per_car)
+					# 獨立水泥
+					elif df_id in one_product_per_car[['id']].values:
+						#                 print("cement_per_car")
+						# 開銷
+						cement_spending = df.loc[df_idx, 's貨款'] * df.loc[df_idx, 'cost_ratio']
+						cements_spending_per_car.append(cement_spending)
 
-						# 在這張車的水泥
-						if df_id in cement[['id']].values:
-							#                 print("cement")
-							# 獲取水泥的index
-							cements_index.append(df_idx)
-							# 獲取水泥的id
-							cement_id = df.loc[df_idx, 'id']
-							cements_id.append(cement_id)
-							# 獲取水泥的貨款
-							cement_payment = df.loc[df_idx, 's貨款']
-							cements_payment.append(cement_payment)
-							# 獲取水泥的開銷
-							cement_spending = df.loc[df_idx, 's貨款'] * df.loc[df_idx, 'cost_ratio']
-							cements_spending.append(cement_spending)
+					# 在這張車的水泥
+					if df_id in cement[['id']].values:
+						#                 print("cement")
+						# 獲取水泥的index
+						cements_index.append(df_idx)
+						# 獲取水泥的id
+						cement_id = df.loc[df_idx, 'id']
+						cements_id.append(cement_id)
+						# 獲取水泥的貨款
+						cement_payment = df.loc[df_idx, 's貨款']
+						cements_payment.append(cement_payment)
+						# 獲取水泥的開銷
+						cement_spending = df.loc[df_idx, 's貨款'] * df.loc[df_idx, 'cost_ratio']
+						cements_spending.append(cement_spending)
 
-					# 獲取現在循環的商品的id
-					stock_ratio_id = stock_ratio.loc[stock_ratio_idx, 'id']
+				# 獲取現在循環的商品的id
+				stock_ratio_id = stock_ratio.loc[stock_ratio_idx, 'id']
 
-					# 現在循環的商品是水泥
-					if stock_ratio_id in cements_id:
-						# 該水泥存在在獨立商品，有獨立成本
-						if stock_ratio_id in one_product_per_car[['id']].values:
-							#                 print("in")
+				# 現在循環的商品是水泥
+				if stock_ratio_id in cements_id:
+					# 該水泥存在在獨立商品，有獨立成本
+					if stock_ratio_id in one_product_per_car[['id']].values:
+						#                 print("in")
 
-							cement_per_car_df = one_product_per_car.loc[one_product_per_car.id == stock_ratio_id]
-							cement_price_per_car_df = cement_per_car_df.loc[cement_per_car_df.進價 == purchase_price]
-							if len(cement_price_per_car_df) != 0:
-								cement_cost_ratio = float(cement_price_per_car_df['cost_ratio'])
-								stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = cement_cost_ratio
-
-							else:
-								# 平均
-								cement_price_per_car_df = cement_per_car_df.groupby('id').agg(
-									{'cost_ratio': 'mean'}).reset_index().round(4)
-								cement_cost_ratio = float(cement_price_per_car_df['cost_ratio'])
-								stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = cement_cost_ratio
-
-							# 最後一條
-						#                     cement_cost_ratio = float(cement_price_per_car_df.tail(1)['cost_ratio'])
-						#                     stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = cement_cost_ratio
-
-						# 該水泥不存在在獨立商品，需要計算
-						else:
-							#                 print("not in")
-
-							# 除水泥之外的獨立商品 --> 獨立商品開銷相加(以防有兩個)
-							sum_products_spending_per_car = np.sum(products_spending_per_car, axis=0)
-							# 獨立水泥 --> 水泥開銷相加(以防有兩個)
-							sum_cements_spending_per_car = np.sum(cements_spending_per_car, axis=0)
-							# 不在獨立的水泥 --> 水泥開銷相加(以防有兩個)
-							sum_cements_spending_not_per_car = np.sum(cements_spending_not_per_car, axis=0)
-							# 以上三個相加
-							both_spending = sum_products_spending_per_car + sum_cements_spending_per_car + sum_cements_spending_not_per_car
-
-							df_groupby = df.groupby("進貨編").agg({'s貨款': 'sum'}).reset_index()  # 整車貨款
-
-							# spending --> 整車所花的開銷或者支出
-							spending = float(df_groupby['s貨款'] * stock_ratio.loc[stock_ratio_idx, 'cost_ratio'])
-
-							# 目前循環到的水泥的開銷 --> 整車開銷減(獨立商品+獨立水泥開銷+不在獨立的水泥)
-							this_cement_spending = spending - both_spending
-
-							cement_cost_ratio = float(this_cement_spending / stock_ratio.loc[stock_ratio_idx, 's貨款'])
-
+						cement_per_car_df = one_product_per_car.loc[one_product_per_car.id == stock_ratio_id]
+						cement_price_per_car_df = cement_per_car_df.loc[cement_per_car_df.進價 == purchase_price]
+						if len(cement_price_per_car_df) != 0:
+							cement_cost_ratio = float(cement_price_per_car_df['cost_ratio'])
 							stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = cement_cost_ratio
-					#                 print(cement_cost_ratio)
 
-					# 現在循環的商品是除水泥之外的商品-->除去水泥后計算其餘商品成本
-					else:
-						#             print("else")
-						# 除水泥之外的獨立商品
-						if stock_ratio_id in one_product_per_car[['id']].values:
-							#                 print("in ---- one_product_per_car")
-
-							product_per_car_df = one_product_per_car.loc[one_product_per_car.id == stock_ratio_id]
-							product_price_per_car_df = product_per_car_df.loc[product_per_car_df.進價 == purchase_price]
-							if len(product_price_per_car_df) != 0:
-								product_cost_ratio = float(product_price_per_car_df['cost_ratio'])
-								stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = product_cost_ratio
-
-						# 除水泥之外的不是獨立商品的商品
 						else:
-							#                 print("not in ---- one_product_per_car")
+							# 平均
+							cement_price_per_car_df = cement_per_car_df.groupby('id').agg(
+								{'cost_ratio': 'mean'}).reset_index().round(4)
+							cement_cost_ratio = float(cement_price_per_car_df['cost_ratio'])
+							stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = cement_cost_ratio
 
-							df_groupby = df.groupby("進貨編").agg({'s貨款': 'sum'}).reset_index()  # 整車貨款
-							# spending --> 整車所花的開銷或者支出
-							spending = float(df_groupby['s貨款'] * stock_ratio.loc[stock_ratio_idx, 'cost_ratio'])
+						# 最後一條
+					#                     cement_cost_ratio = float(cement_price_per_car_df.tail(1)['cost_ratio'])
+					#                     stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = cement_cost_ratio
 
-							# 除水泥之外的獨立商品 --> 獨立商品開銷相加(以防有兩個)
-							sum_products_spending_per_car = np.sum(products_spending_per_car, axis=0)
-							# 水泥 --> 水泥開銷相加(以防有兩個)
-							sum_cements_spending = np.sum(cements_spending, axis=0)
-							both_spending = sum_products_spending_per_car + sum_cements_spending  # 以上兩個相加
-							# 剩餘的開銷 --> 整車開銷減(除水泥外的獨立商品+全部水泥開銷)
-							products_spending = spending - both_spending
+					# 該水泥不存在在獨立商品，需要計算
+					else:
+						#                 print("not in")
 
-							if spending > 0 and products_spending < 0:
-								#                     print("stock_ratio = 0")
-								stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = 0
-							#                     print(product_cost_ratio)
+						# 除水泥之外的獨立商品 --> 獨立商品開銷相加(以防有兩個)
+						sum_products_spending_per_car = np.sum(products_spending_per_car, axis=0)
+						# 獨立水泥 --> 水泥開銷相加(以防有兩個)
+						sum_cements_spending_per_car = np.sum(cements_spending_per_car, axis=0)
+						# 不在獨立的水泥 --> 水泥開銷相加(以防有兩個)
+						sum_cements_spending_not_per_car = np.sum(cements_spending_not_per_car, axis=0)
+						# 以上三個相加
+						both_spending = sum_products_spending_per_car + sum_cements_spending_per_car + sum_cements_spending_not_per_car
 
-							else:
-								#                     print("正常")
+						df_groupby = df.groupby("進貨編").agg({'s貨款': 'sum'}).reset_index()  # 整車貨款
 
-								# 除水泥之外的獨立商品 --> 獨立商品貨款相加(以防有兩個)
-								sum_products_payment_per_car = np.sum(products_payment_per_car, axis=0)
-								# 水泥 --> 水泥貨款相加(以防有兩個)
-								sum_cements_payment = np.sum(cements_payment, axis=0)
-								both_payment = sum_products_payment_per_car + sum_cements_payment  # 以上兩個相加
-								# 剩餘的貨款 --> 整車貨款減(除水泥外的獨立商品+全部水泥貨款)
-								products_payment = df_groupby['s貨款'] - both_payment
+						# spending --> 整車所花的開銷或者支出
+						spending = float(df_groupby['s貨款'] * stock_ratio.loc[stock_ratio_idx, 'cost_ratio'])
 
-								# 剩餘貨款的成本比例 --> 以金額為准來計算百分比
-								product_cost_ratio = float(products_spending / products_payment)
+						# 目前循環到的水泥的開銷 --> 整車開銷減(獨立商品+獨立水泥開銷+不在獨立的水泥)
+						this_cement_spending = spending - both_spending
 
-								stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = product_cost_ratio
+						cement_cost_ratio = float(this_cement_spending / stock_ratio.loc[stock_ratio_idx, 's貨款'])
 
-			stock_ratio = stock_ratio.sort_values(by='歸零日期', ascending=False)
+						stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = cement_cost_ratio
+				#                 print(cement_cost_ratio)
 
-			# 刪除多餘庫存的進貨筆數
-			for stock_ratio_idx, stock_ratio_data in stock_ratio.iterrows():
+				# 現在循環的商品是除水泥之外的商品-->除去水泥后計算其餘商品成本
+				else:
+					#             print("else")
+					# 除水泥之外的獨立商品
+					if stock_ratio_id in one_product_per_car[['id']].values:
+						#                 print("in ---- one_product_per_car")
 
-				print(stock_ratio_idx)
+						product_per_car_df = one_product_per_car.loc[one_product_per_car.id == stock_ratio_id]
+						product_price_per_car_df = product_per_car_df.loc[product_per_car_df.進價 == purchase_price]
+						if len(product_price_per_car_df) != 0:
+							product_cost_ratio = float(product_price_per_car_df['cost_ratio'])
+							stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = product_cost_ratio
 
-				if stock_ratio_idx in stock_ratio.index:
+					# 除水泥之外的不是獨立商品的商品
+					else:
+						#                 print("not in ---- one_product_per_car")
 
-					print("index exist")
+						df_groupby = df.groupby("進貨編").agg({'s貨款': 'sum'}).reset_index()  # 整車貨款
+						# spending --> 整車所花的開銷或者支出
+						spending = float(df_groupby['s貨款'] * stock_ratio.loc[stock_ratio_idx, 'cost_ratio'])
 
-					# 以id來區分循環數據
-					df = stock_ratio.loc[(stock_ratio['id'] == stock_ratio_data[7])]  # 從0開始數的列位置
-					# 循環到第几次 -->初始為0
-					count = 0
-					# 相加后的采購数量總和 -->初始為0
-					purchase_qty = 0
+						# 除水泥之外的獨立商品 --> 獨立商品開銷相加(以防有兩個)
+						sum_products_spending_per_car = np.sum(products_spending_per_car, axis=0)
+						# 水泥 --> 水泥開銷相加(以防有兩個)
+						sum_cements_spending = np.sum(cements_spending, axis=0)
+						both_spending = sum_products_spending_per_car + sum_cements_spending  # 以上兩個相加
+						# 剩餘的開銷 --> 整車開銷減(除水泥外的獨立商品+全部水泥開銷)
+						products_spending = spending - both_spending
 
-					for df_idx, df_data in df.iterrows():
+						if spending > 0 and products_spending < 0:
+							#                     print("stock_ratio = 0")
+							stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = 0
+						#                     print(product_cost_ratio)
 
-						count += 1
-						# 采购数量相加
-						purchase_qty += df_data[8]
-						# 庫存
-						stock = df_data[16]
+						else:
+							#                     print("正常")
 
-						# 當循環到的進貨的數量大於庫存，刪除剩餘的數據，推出循環
-						if purchase_qty >= stock:
-							# 要刪除的數量
-							drop_qty = len(df) - count
-							index_drop_qty = df.tail(drop_qty).index
-							# 刪除
-							stock_ratio = stock_ratio.drop(index=index_drop_qty, axis=1)
+							# 除水泥之外的獨立商品 --> 獨立商品貨款相加(以防有兩個)
+							sum_products_payment_per_car = np.sum(products_payment_per_car, axis=0)
+							# 水泥 --> 水泥貨款相加(以防有兩個)
+							sum_cements_payment = np.sum(cements_payment, axis=0)
+							both_payment = sum_products_payment_per_car + sum_cements_payment  # 以上兩個相加
+							# 剩餘的貨款 --> 整車貨款減(除水泥外的獨立商品+全部水泥貨款)
+							products_payment = df_groupby['s貨款'] - both_payment
 
-							# 退出循環
-							break
+							# 剩餘貨款的成本比例 --> 以金額為准來計算百分比
+							product_cost_ratio = float(products_spending / products_payment)
 
-			# 平均成本
-			cost_ratio_mean = stock_ratio.groupby("id").agg(
-				{'數量': 'sum', 'cost_ratio': 'mean', 'stock': 'mean'}).reset_index().round(4)
+							stock_ratio.loc[stock_ratio_idx, 'cost_ratio'] = product_cost_ratio
 
-			# cost_ratio = inf 代表数据无效 --> 替換成 NaN --> 刪除
-			cost_ratio_mean = cost_ratio_mean.replace([np.inf, -np.inf], np.nan).dropna(axis=0, subset=['cost_ratio'])
+		stock_ratio = stock_ratio.sort_values(by='歸零日期', ascending=False)
 
-			# 计算当前时间 TimeZone
-			tz = pytz.timezone('Asia/Yangon')  # 缅甸时间 TimeZone
-			dt = datetime.datetime.now(tz=tz).strftime('%Y-%m-%d %H:%M:%S %Z')  # .strftime('%Y-%m-%d %H:%M:%S %Z%z')
-			print(dt)
+		# 刪除多餘庫存的進貨筆數
+		for stock_ratio_idx, stock_ratio_data in stock_ratio.iterrows():
 
-			# 商品的最新價錢
-			s_price_cost = pd.merge(cost_ratio_mean, last_s_df, how='outer', on='id', left_index=False,
-									right_index=False, sort=True)
-			s_price_cost['datetime'] = dt
-			s_price_cost['s_price'] = s_price_cost['s_price'].fillna(0)  # NaN convert 0
-			s_price_cost = s_price_cost[['id', 'datetime', 's_price', 'cost_ratio']]
+			print(stock_ratio_idx)
 
-			# 从数据库叫出 inventory_cost 表 最新商品價錢及成本
-			# 为了获取当天最高cost_ratio的同時s_price也是最高價
-			inventory_cost_tb = pd.read_sql("SELECT * from inventory_cost", con).sort_values(
-				by=['cost_ratio', 's_price'], ascending=False)
-			# 最新的成本
-			inventory_cost_tb = inventory_cost_tb.loc[inventory_cost_tb.groupby(["id"])["datetime"].idxmax()]
+			if stock_ratio_idx in stock_ratio.index:
 
-			# 有更新的數據 --> 相比下s_price 和 cost_ratio不同的
-			update_s_price_cost = (s_price_cost.merge(inventory_cost_tb, on=['id', 's_price', 'cost_ratio'],
-									how='left', indicator=True).query('_merge == "left_only"')).drop(
-									columns=['serial_id', 'datetime_y', 'price', 'subsidy', '_merge'])
+				print("index exist")
 
-			update_s_price_cost.rename(columns={'datetime_x': 'datetime'}, inplace=True)
+				# 以id來區分循環數據
+				df = stock_ratio.loc[(stock_ratio['id'] == stock_ratio_data[7])]  # 從0開始數的列位置
+				# 循環到第几次 -->初始為0
+				count = 0
+				# 相加后的采購数量總和 -->初始為0
+				purchase_qty = 0
 
-			# 對比有更新的數據
-			compared = pd.merge(update_s_price_cost, inventory_cost_tb[['id', 's_price', 'cost_ratio']], how='left',
-								on='id', left_index=False, right_index=False, sort=True)
-			compared['s_price_x'] = compared['s_price_x'].round(2)
+				for df_idx, df_data in df.iterrows():
 
-			# 新數據
-			new_data = compared.loc[compared['cost_ratio_y'].isnull()]  # NaN 新出來的不在原表的數據
+					count += 1
+					# 采购数量相加
+					purchase_qty += df_data[8]
+					# 庫存
+					stock = df_data[16]
 
-			# 新的s_price
-			s_price_dif = compared.loc[compared['s_price_x'] != compared['s_price_y']]  # s價錢和老價錢不一樣
+					# 當循環到的進貨的數量大於庫存，刪除剩餘的數據，推出循環
+					if purchase_qty >= stock:
+						# 要刪除的數量
+						drop_qty = len(df) - count
+						index_drop_qty = df.tail(drop_qty).index
+						# 刪除
+						stock_ratio = stock_ratio.drop(index=index_drop_qty, axis=1)
 
-			# cost_ratio漲跌>0.5%
-			cost_ratio_dif = compared.loc[(compared.cost_ratio_x - compared.cost_ratio_y > 0.005) |  # 成本漲大於0.5%
-										  (compared.cost_ratio_x - compared.cost_ratio_y < -0.005)  # 成本跌大於0.5%
-										  ]
+						# 退出循環
+						break
 
-			# 合并 .drop_duplicates()去重
-			cost_ratio_s_price_dif = pd.concat([new_data, s_price_dif, cost_ratio_dif]).drop_duplicates().drop(
-										columns={'cost_ratio_y', 's_price_y'}).rename(
-										columns={'cost_ratio_x': 'cost_ratio', 's_price_x': 's_price'})
+		# 刪除沒有庫存的商品
+		stock_ratio = stock_ratio.drop(stock_ratio[stock_ratio['stock'].isnull()].index)
+		print(len(stock_ratio))
 
-			# 計算成本
-			s_price = cost_ratio_s_price_dif['s_price']
-			cost_ratio = cost_ratio_s_price_dif['cost_ratio']
-			cost_ratio_s_price_dif['price'] = (s_price * cost_ratio) + s_price
+		# 平均成本
+		cost_ratio_mean = stock_ratio.groupby("id").agg(
+			{'數量': 'sum', 'cost_ratio': 'mean', 'stock': 'mean'}).reset_index().round(4)
 
-			# Insert changed rows to psql --> cost table
-			cost_ratio_s_price_dif.to_sql('inventory_cost', con=engine_price, if_exists='append', index=False)
+		# cost_ratio = inf 代表数据无效 --> 替換成 NaN --> 刪除
+		cost_ratio_mean = cost_ratio_mean.replace([np.inf, -np.inf], np.nan).dropna(axis=0, subset=['cost_ratio'])
 
-			# # 从数据库叫出 inventory_cost 表
-			# # 倒序排序 --> 为了获取s_price最高的同時cost_ratio最高價
-			# new_inventory_cost_tb = pd.read_sql("SELECT * from inventory_cost", con).sort_values(
-			# 						by=['s_price', 'cost_ratio'], ascending=False)
-			# # 最新的進價及成本
-			# new_data = new_inventory_cost_tb.loc[new_inventory_cost_tb.groupby(["id"])["datetime"].idxmax()]
-			#
-			# # DataFrame to json
-			# B2002 = new_data.to_json(orient="records")
-			# return B2002
+		# 计算当前时间 TimeZone
+		tz = pytz.timezone('Asia/Yangon')  # 缅甸时间 TimeZone
+		dt = datetime.datetime.now(tz=tz).strftime('%Y-%m-%d %H:%M:%S %Z')  # .strftime('%Y-%m-%d %H:%M:%S %Z%z')
+		print(dt)
 
-			return jsonify("yohu")
+		# 商品的最新價錢
+		s_price_cost = pd.merge(cost_ratio_mean, last_s_df, how='outer', on='id', left_index=False,
+								right_index=False, sort=True)
+		s_price_cost['datetime'] = dt
+		s_price_cost['s_price'] = s_price_cost['s_price'].fillna(0)  # NaN convert 0
+		s_price_cost = s_price_cost[['id', 'datetime', 's_price', 'cost_ratio']]
+
+		# 从数据库叫出 inventory_cost 表 最新商品價錢及成本
+		# 为了获取当天最高cost_ratio的同時s_price也是最高價
+		inventory_cost_tb = pd.read_sql("SELECT * from inventory_cost", con).sort_values(
+			by=['cost_ratio', 's_price'], ascending=False)
+		# 最新的成本
+		inventory_cost_tb = inventory_cost_tb.loc[inventory_cost_tb.groupby(["id"])["datetime"].idxmax()]
+
+		# 有更新的數據 --> 相比下s_price 和 cost_ratio不同的
+		update_s_price_cost = (s_price_cost.merge(inventory_cost_tb, on=['id', 's_price', 'cost_ratio'],
+								how='left', indicator=True).query('_merge == "left_only"')).drop(
+								columns=['serial_id', 'datetime_y', 'price', 'subsidy', '_merge'])
+
+		update_s_price_cost.rename(columns={'datetime_x': 'datetime'}, inplace=True)
+
+		# 對比有更新的數據
+		compared = pd.merge(update_s_price_cost, inventory_cost_tb[['id', 's_price', 'cost_ratio']], how='left',
+							on='id', left_index=False, right_index=False, sort=True)
+		compared['s_price_x'] = compared['s_price_x'].round(2)
+
+		# 新數據
+		new_data = compared.loc[compared['cost_ratio_y'].isnull()]  # NaN 新出來的不在原表的數據
+
+		# 新的s_price
+		s_price_dif = compared.loc[compared['s_price_x'] != compared['s_price_y']]  # s價錢和老價錢不一樣
+
+		# cost_ratio漲跌>0.5%
+		cost_ratio_dif = compared.loc[(compared.cost_ratio_x - compared.cost_ratio_y > 0.005) |  # 成本漲大於0.5%
+									  (compared.cost_ratio_x - compared.cost_ratio_y < -0.005)  # 成本跌大於0.5%
+									  ]
+
+		# 合并 .drop_duplicates()去重
+		cost_ratio_s_price_dif = pd.concat([new_data, s_price_dif, cost_ratio_dif]).drop_duplicates().drop(
+									columns={'cost_ratio_y', 's_price_y'}).rename(
+									columns={'cost_ratio_x': 'cost_ratio', 's_price_x': 's_price'})
+
+		# 計算成本
+		s_price = cost_ratio_s_price_dif['s_price']
+		cost_ratio = cost_ratio_s_price_dif['cost_ratio']
+		cost_ratio_s_price_dif['price'] = (s_price * cost_ratio) + s_price
+
+		# Insert changed rows to psql --> cost table
+		cost_ratio_s_price_dif.to_sql('inventory_cost', con=engine_price, if_exists='append', index=False)
+
+		# # 从数据库叫出 inventory_cost 表
+		# # 倒序排序 --> 为了获取s_price最高的同時cost_ratio最高價
+		# new_inventory_cost_tb = pd.read_sql("SELECT * from inventory_cost", con).sort_values(
+		# 						by=['s_price', 'cost_ratio'], ascending=False)
+		# # 最新的進價及成本
+		# new_data = new_inventory_cost_tb.loc[new_inventory_cost_tb.groupby(["id"])["datetime"].idxmax()]
+		#
+		# # DataFrame to json
+		# B2002 = new_data.to_json(orient="records")
+		# return B2002
+
+		return jsonify("yohu")
 
 	except Exception:
 

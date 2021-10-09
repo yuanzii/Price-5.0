@@ -1,4 +1,4 @@
-# Price-5.0
+### Price-5.0
 
 -改变方案 ---> 计算开销/成本比
 -vue client port ---> 8050
@@ -18,7 +18,7 @@
 -更改数据库
  -backend\server\db\psql_psycopg2.py
  -backend\server\db\psql_sqlalchemy.py
- 
+
 -同一服务器内的 PostgreSQL 复制数据库
 
  -CREATE DATABASE dvdrental_test WITH TEMPLATE dvdrental;
