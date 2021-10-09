@@ -82,7 +82,7 @@ export default {
         this.load_data();
       } else {
         var send_info = value;
-        const path = this.$api + "/purchase_s_price_api";
+        const path = this.$api + "/cost_ratio_api";
         axios
           .post(path, send_info)
           .then((res) => {
