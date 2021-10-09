@@ -15,6 +15,10 @@
  -全局 ---> main.js
  -引用 无需import ---> this.$api
 
+-更改数据库
+ -backend\server\db\psql_psycopg2.py
+ -backend\server\db\psql_sqlalchemy.py
+ 
 -同一服务器内的 PostgreSQL 复制数据库
 
  -CREATE DATABASE dvdrental_test WITH TEMPLATE dvdrental;
